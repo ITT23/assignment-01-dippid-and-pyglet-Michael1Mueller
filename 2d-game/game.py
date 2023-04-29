@@ -25,13 +25,18 @@ SPACESHIP_WIDTH = 48
 ROCKET_SPEED = 4
 ENEMY_SPEED = 6
 POINTS = 0
+GAME_OVER_X = WINDOW_WIDTH/2 - 300
+GAME_OVER_Y = WINDOW_HEIGHT/2 + 100
+LINE_HEIGHT = 60
+FONT_SIZE = 24
 
+status_running = True
 already_shot = False
 
 win = window.Window(WINDOW_WIDTH, WINDOW_HEIGHT)
 
-
 batch = pyglet.graphics.Batch()
+batch_game_over = pyglet.graphics.Batch()
 background = pyglet.graphics.Group(0)
 foreground = pyglet.graphics.Group(1)
 # background img from https://unsplash.com/de/fotos/uhjiu8FjnsQ
@@ -40,6 +45,22 @@ background = pyglet.sprite.Sprite(background_img, x=0, y=0, batch=batch, group=b
 
 score = pyglet.text.Label(text=f"Score: {POINTS}", x=LEFT_BORDER, y=BOTTOM_BORDER, batch=batch)
 
+# for game-over screen
+game_over = pyglet.text.Label(text="GAME OVER", font_size=FONT_SIZE, x=GAME_OVER_X, y=GAME_OVER_Y, batch=batch_game_over,
+                              group=foreground)
+
+game_over_score = pyglet.text.Label(text=f"Your Score: {POINTS}", font_size=FONT_SIZE, x=GAME_OVER_X,
+                                    y=GAME_OVER_Y - LINE_HEIGHT, batch=batch_game_over, group=foreground)
+
+restart_message = pyglet.text.Label(text="Press button_1 to restart or button_3 to quit", font_size=FONT_SIZE,
+                                    x=GAME_OVER_X, y=GAME_OVER_Y - LINE_HEIGHT * 2, batch=batch_game_over,
+                                    group=foreground)
+
+# https://clipartcraft.com/download.html
+explosion_img = pyglet.image.load("./sprites/explosion.png")
+explosion = pyglet.sprite.Sprite(explosion_img, x=0, y=0, batch=batch_game_over,
+                                 group=foreground)
+explosion.scale = 0.3
 
 class Spaceship:
     # sprite downloaded from https://foozlecc.itch.io/void-main-ship
@@ -56,6 +77,7 @@ class Spaceship:
         else:
             self.x -= self.speed
         self.spaceship.position = (self.x, self.y, 0)
+        explosion.position = (self.x, self.y, 0)
 
     def move_y(self, move_down=False):
         if not move_down:
@@ -129,6 +151,9 @@ class Enemy:
         Enemy.enemies.remove(self)
         self.shape.delete()
 
+    def delete_all():
+        for enemy in Enemy.enemies:
+            enemy.delete_enemy()
 
 
 spaceship = Spaceship(SPACESHIP_SPEED)
@@ -139,35 +164,61 @@ def on_draw():
     win.clear()
     batch.draw()
     spaceship.draw()
+    if not status_running:
+        batch_game_over.draw()
 
 
 def update(dt):
     global already_shot
+    global status_running
 
-    # check if the sensor has the 'accelerometer' capability
-    if sensor.has_capability('rotation'):
-        print(sensor.get_value('rotation'))
-        # x rotation
-        angle_x = sensor.get_value('rotation')['pitch']
-        # y rotation
-        angle_y = sensor.get_value('rotation')['roll']
-        sprite_move(angle_x, angle_y)
+    if status_running:
+
+        # check if the sensor has the 'accelerometer' capability
+        if sensor.has_capability('accelerometer'):
+            # print(sensor.get_value('rotation'))
+            # x rotation
+            angle_x = sensor.get_value('accelerometer')['x']
+            # y rotation
+            angle_y = sensor.get_value('accelerometer')['y']
+            sprite_move(angle_x, angle_y)
+
+        if sensor.has_capability('button_1'):
+            button_value = sensor.get_value('button_1')
+            if button_value == 1:
+                if not already_shot:
+                    Rocket.create_rocket()
+                already_shot = True
+
+            if button_value == 0:
+                already_shot = False
+
+            if len(Rocket.rockets) > 0:
+                Rocket.update_rockets()
+
+        check_for_hit()
+        check_for_crash()
+        spawn_enemies()
+    else:
+        Enemy.delete_all()
+        check_for_restart()
+
+
+def check_for_restart():
+    global status_running
+    global POINTS
 
     if sensor.has_capability('button_1'):
         button_value = sensor.get_value('button_1')
         if button_value == 1:
-            if not already_shot:
-                Rocket.create_rocket()
-            already_shot = True
+            status_running = True
+            POINTS = 0
+            score.text = f"Score: {POINTS}"
 
-        if button_value == 0:
-            already_shot = False
-
-        if len(Rocket.rockets) > 0:
-            Rocket.update_rockets()
-
-    check_for_hit()
-    spawn_enemies()
+    if sensor.has_capability('button_3'):
+        button_value_3 = sensor.get_value('button_3')
+        if button_value_3 == 1:
+            win.close()
 
 
 def check_for_hit():
@@ -189,11 +240,26 @@ def check_for_hit():
                 score.text = f"Score: {POINTS}"
 
 
+def check_for_crash():
+    global status_running
+    enemies = Enemy.enemies
+
+    for enemy in enemies:
+        dist_x = spaceship.x - enemy.x
+        dist_y = spaceship.y - enemy.y
+
+        dist = np.sqrt(pow(dist_x, 2) + pow(dist_y, 2))
+        if dist <= SPACESHIP_WIDTH + enemy.shape.radius:
+            # delete everything
+            enemy.delete_enemy()
+            status_running = False
+
+
 def spawn_enemies():
-    randX = random.randint(10, 790)
+    rand_x = random.randint(10, 790)
     rand = random.randint(0, 100)
     if rand == 0 or rand == 50:
-        Enemy.create_enemy(randX, BOTTOM_BORDER)
+        Enemy.create_enemy(rand_x, BOTTOM_BORDER)
     if len(Enemy.enemies) > 0:
         Enemy.update_enemies()
 
@@ -201,7 +267,7 @@ def spawn_enemies():
 def sprite_move(angle_x, angle_y):
     # for x movement
     if LEFT_BORDER < spaceship.x < RIGHT_BORDER:
-        if angle_x < 0:
+        if angle_x > 0:
             spaceship.move_x(False)
         else:
             spaceship.move_x(True)
@@ -222,8 +288,6 @@ def sprite_move(angle_x, angle_y):
     elif spaceship.y < TOP_BORDER + 1:
         spaceship.move_y(False)
     '''
-        # angle_y = sensor.get_value('rotation')['y']
-        # angle_z = sensor.get_value('rotation')['z']
 
 
 pyglet.clock.schedule_interval(update, 0.01)
