@@ -3,32 +3,18 @@ import numpy as np
 import pyglet
 from pyglet import window
 from DIPPID import SensorUDP
+from constants import WINDOW_WIDTH, WINDOW_HEIGHT, LEFT_BORDER, RIGHT_BORDER, BOTTOM_BORDER, TOP_BORDER
+from constants import SPACESHIP_SPEED, SPACESHIP_HEIGHT, SPACESHIP_WIDTH
+from constants import ROCKET_SPEED, ENEMY_SPEED, GAME_OVER_Y, GAME_OVER_X
+from constants import LINE_HEIGHT, FONT_SIZE
+from constants import batch, batch_game_over, background, foreground
+from Enemy import Enemy
+
 
 
 # use UPD (via WiFi) for communication
 PORT = 5700
 sensor = SensorUDP(PORT)
-
-
-# window properties
-WINDOW_WIDTH = 800
-WINDOW_HEIGHT = 600
-LEFT_BORDER = 9
-RIGHT_BORDER = 755
-BOTTOM_BORDER = 10
-TOP_BORDER = 585
-# spaceship properties
-SPACESHIP_SPEED = 5
-SPACESHIP_HEIGHT = 48
-SPACESHIP_WIDTH = 48
-# game elements properties
-ROCKET_SPEED = 6
-ENEMY_SPEED = 6
-GAME_OVER_X = WINDOW_WIDTH/2 - 300
-GAME_OVER_Y = WINDOW_HEIGHT/2 + 100
-# game over properties
-LINE_HEIGHT = 60
-FONT_SIZE = 24
 
 status_running = True
 already_shot = False
@@ -36,10 +22,6 @@ points = 0
 
 win = window.Window(WINDOW_WIDTH, WINDOW_HEIGHT)
 
-batch = pyglet.graphics.Batch()
-batch_game_over = pyglet.graphics.Batch()
-background = pyglet.graphics.Group(0)
-foreground = pyglet.graphics.Group(1)
 # background img from https://unsplash.com/de/fotos/uhjiu8FjnsQ
 background_img = pyglet.image.load('./sprites/background.jpg')
 background = pyglet.sprite.Sprite(background_img, x=0, y=0, batch=batch, group=background)
@@ -53,7 +35,7 @@ game_over = pyglet.text.Label(text="GAME OVER", font_size=FONT_SIZE, x=GAME_OVER
 game_over_score = pyglet.text.Label(text=f"Your Score: {points}", font_size=FONT_SIZE, x=GAME_OVER_X,
                                     y=GAME_OVER_Y - LINE_HEIGHT, batch=batch_game_over, group=foreground)
 
-restart_message = pyglet.text.Label(text="Press button_1 to restart or button_3 to quit", font_size=FONT_SIZE,
+restart_message = pyglet.text.Label(text="Press button_2 to restart or button_3 to quit", font_size=FONT_SIZE,
                                     x=GAME_OVER_X, y=GAME_OVER_Y - LINE_HEIGHT * 2, batch=batch_game_over,
                                     group=foreground)
 
@@ -93,6 +75,9 @@ class Spaceship:
         self.spaceship.draw()
 
 
+spaceship = Spaceship(SPACESHIP_SPEED)
+
+
 # class structure inspiration from pyglet-demo (grips)
 class Rocket:
     rockets = []
@@ -125,44 +110,9 @@ class Rocket:
         Rocket.rockets.remove(self)
         self.shape.delete()
 
-
-class Enemy:
-    enemies = []
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.shape = pyglet.shapes.Circle(self.x, self.y, 6, color=(255, 255, 255), batch=batch, group=foreground)
-
-    def update_enemies():
-        for enemy in Enemy.enemies:
-            enemy.move()
-
-    def draw_enemies(self):
-        for enemy in Enemy.enemies:
-            enemy.draw()
-
-    def create_enemy(x, y):
-        Enemy.enemies.append(Enemy(x, y))
-
-    def move(self):
-        self.y -= ENEMY_SPEED
-        # got .position with ChatGPT Prompt
-        self.shape.position = (self.x, self.y)
-
-    def draw(self):
-        self.shape.draw()
-
-    def delete_enemy(self):
-        Enemy.enemies.remove(self)
-        self.shape.delete()
-
     def delete_all():
-        for enemy in Enemy.enemies:
-            enemy.delete_enemy()
-
-
-spaceship = Spaceship(SPACESHIP_SPEED)
+        for rocket in Rocket.rockets:
+            rocket.delete_rocket()
 
 
 @win.event
@@ -204,22 +154,36 @@ def update(dt):
         check_for_hit()
         check_for_crash()
         spawn_enemies()
+        delete_elements_out_of_bounds()
     else:
         Enemy.delete_all()
+        Rocket.delete_all()
         check_for_restart()
+
+
+# deletes all enemies and rockets out of bounds
+def delete_elements_out_of_bounds():
+    for enemy in Enemy.enemies:
+        if enemy.y < 0:
+            enemy.delete_enemy()
+
+    for rocket in Rocket.rockets:
+        if rocket.y > WINDOW_HEIGHT:
+            rocket.delete_rocket()
 
 
 def check_for_restart():
     global status_running
     global points
 
-    if sensor.has_capability('button_1'):
-        button_value = sensor.get_value('button_1')
+    if sensor.has_capability('button_2'):
+        button_value = sensor.get_value('button_2')
         if button_value == 1:
             status_running = True
             points = 0
             # got .text with ChatGPT Prompt
             score.text = f"Score: {points}"
+            game_over_score.text = f"Score: {points}"
 
     if sensor.has_capability('button_3'):
         button_value_3 = sensor.get_value('button_3')
@@ -238,12 +202,13 @@ def check_for_hit():
             dist_x = rocket.x - enemy.x
             dist_y = rocket.y - enemy.y
             dist = np.sqrt(pow(dist_x, 2) + pow(dist_y, 2))
-            if dist <= rocket.shape.radius + enemy.shape.radius:
+            if dist <= rocket.shape.radius + enemy.meteor.width/2:
                 rocket.delete_rocket()
                 enemy.delete_enemy()
                 points += 1
                 # got .text with ChatGPT Prompt
                 score.text = f"Score: {points}"
+                game_over_score.text = f"Score: {points}"
 
 
 def check_for_crash():
@@ -255,7 +220,7 @@ def check_for_crash():
         dist_y = spaceship.y - enemy.y
 
         dist = np.sqrt(pow(dist_x, 2) + pow(dist_y, 2))
-        if dist <= SPACESHIP_WIDTH + enemy.shape.radius:
+        if dist <= SPACESHIP_WIDTH/2 + enemy.meteor.width/2:
             enemy.delete_enemy()
             status_running = False
 
@@ -263,8 +228,8 @@ def check_for_crash():
 def spawn_enemies():
     # spawn enemies at random x location
     rand_x = random.randint(10, 790)
-    rand = random.randint(0, 100)
-    if rand == 0 or rand == 50:
+    rand = random.randint(0, 50)
+    if rand == 0 or rand == 10 or rand == 25 or rand == 50:
         Enemy.create_enemy(rand_x, TOP_BORDER)
     if len(Enemy.enemies) > 0:
         Enemy.update_enemies()
