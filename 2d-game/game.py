@@ -1,10 +1,8 @@
 import random
-
 import numpy as np
 import pyglet
 from pyglet import window
 from DIPPID import SensorUDP
-from time import sleep
 
 
 # use UPD (via WiFi) for communication
@@ -17,14 +15,13 @@ WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 LEFT_BORDER = 9
 RIGHT_BORDER = 755
-TOP_BORDER = 10
-BOTTOM_BORDER = 585
+BOTTOM_BORDER = 10
+TOP_BORDER = 585
 SPACESHIP_SPEED = 2
 SPACESHIP_HEIGHT = 48
 SPACESHIP_WIDTH = 48
 ROCKET_SPEED = 4
 ENEMY_SPEED = 6
-POINTS = 0
 GAME_OVER_X = WINDOW_WIDTH/2 - 300
 GAME_OVER_Y = WINDOW_HEIGHT/2 + 100
 LINE_HEIGHT = 60
@@ -32,6 +29,7 @@ FONT_SIZE = 24
 
 status_running = True
 already_shot = False
+points = 0
 
 win = window.Window(WINDOW_WIDTH, WINDOW_HEIGHT)
 
@@ -43,13 +41,13 @@ foreground = pyglet.graphics.Group(1)
 background_img = pyglet.image.load('./sprites/background.jpg')
 background = pyglet.sprite.Sprite(background_img, x=0, y=0, batch=batch, group=background)
 
-score = pyglet.text.Label(text=f"Score: {POINTS}", x=LEFT_BORDER, y=BOTTOM_BORDER, batch=batch)
+score = pyglet.text.Label(text=f"Score: {points}", x=LEFT_BORDER, y=TOP_BORDER, batch=batch)
 
 # for game-over screen
 game_over = pyglet.text.Label(text="GAME OVER", font_size=FONT_SIZE, x=GAME_OVER_X, y=GAME_OVER_Y, batch=batch_game_over,
                               group=foreground)
 
-game_over_score = pyglet.text.Label(text=f"Your Score: {POINTS}", font_size=FONT_SIZE, x=GAME_OVER_X,
+game_over_score = pyglet.text.Label(text=f"Your Score: {points}", font_size=FONT_SIZE, x=GAME_OVER_X,
                                     y=GAME_OVER_Y - LINE_HEIGHT, batch=batch_game_over, group=foreground)
 
 restart_message = pyglet.text.Label(text="Press button_1 to restart or button_3 to quit", font_size=FONT_SIZE,
@@ -206,14 +204,14 @@ def update(dt):
 
 def check_for_restart():
     global status_running
-    global POINTS
+    global points
 
     if sensor.has_capability('button_1'):
         button_value = sensor.get_value('button_1')
         if button_value == 1:
             status_running = True
-            POINTS = 0
-            score.text = f"Score: {POINTS}"
+            points = 0
+            score.text = f"Score: {points}"
 
     if sensor.has_capability('button_3'):
         button_value_3 = sensor.get_value('button_3')
@@ -222,7 +220,7 @@ def check_for_restart():
 
 
 def check_for_hit():
-    global POINTS
+    global points
     rockets = Rocket.rockets
     enemies = Enemy.enemies
 
@@ -235,9 +233,9 @@ def check_for_hit():
             if dist <= rocket.shape.radius + enemy.shape.radius:
                 rocket.delete_rocket()
                 enemy.delete_enemy()
-                POINTS += 1
+                points += 1
                 # got score.text with ChatGPT Prompt
-                score.text = f"Score: {POINTS}"
+                score.text = f"Score: {points}"
 
 
 def check_for_crash():
@@ -259,7 +257,7 @@ def spawn_enemies():
     rand_x = random.randint(10, 790)
     rand = random.randint(0, 100)
     if rand == 0 or rand == 50:
-        Enemy.create_enemy(rand_x, BOTTOM_BORDER)
+        Enemy.create_enemy(rand_x, TOP_BORDER)
     if len(Enemy.enemies) > 0:
         Enemy.update_enemies()
 
