@@ -55,21 +55,13 @@ class Spaceship:
         self.x = x
         self.y = y
 
-    def move_x(self, move_right=False):
+    def move(self, move_right=False):
         if move_right:
             self.x += self.speed
         else:
             self.x -= self.speed
         self.spaceship.position = (self.x, self.y, 0)
         explosion.position = (self.x, self.y, 0)
-
-    def move_y(self, move_down=False):
-        if not move_down:
-            self.y += self.speed
-        else:
-            self.y -= self.speed
-        # got .position with ChatGPT Prompt
-        self.spaceship.position = (self.x, self.y, 0)
 
     def draw(self):
         self.spaceship.draw()
@@ -134,8 +126,7 @@ def update(dt):
         # check if the sensor has the 'accelerometer' capability
         if sensor.has_capability('accelerometer'):
             angle_x = sensor.get_value('accelerometer')['x']
-            angle_y = sensor.get_value('accelerometer')['y']
-            sprite_move(angle_x, angle_y)
+            sprite_move(angle_x)
 
         if sensor.has_capability('button_1'):
             button_value = sensor.get_value('button_1')
@@ -235,32 +226,19 @@ def spawn_enemies():
         Enemy.update_enemies()
 
 
-def sprite_move(angle_x, angle_y):
+def sprite_move(angle_x):
     # for x movement
     if LEFT_BORDER < spaceship.x < RIGHT_BORDER:
         # if spaceship is in bounds, move according to accelerometer data
         if angle_x > 0:
-            spaceship.move_x(False)
+            spaceship.move(False)
         else:
-            spaceship.move_x(True)
+            spaceship.move(True)
     # if spaceship gets out of bounds ->set back
     elif spaceship.x < LEFT_BORDER + 1:
-        spaceship.move_x(True)
+        spaceship.move(True)
     elif spaceship.x > RIGHT_BORDER - 1:
-        spaceship.move_x(False)
-
-    # for y movement
-    '''
-    if TOP_BORDER < spaceship.y < BOTTOM_BORDER:
-        if angle_y < 0:
-            spaceship.move_y(False)
-        else:
-            spaceship.move_y(True)
-    elif spaceship.y > BOTTOM_BORDER - 1:
-        spaceship.move_y(True)
-    elif spaceship.y < TOP_BORDER + 1:
-        spaceship.move_y(False)
-    '''
+        spaceship.move(False)
 
 
 pyglet.clock.schedule_interval(update, 0.01)
